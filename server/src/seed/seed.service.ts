@@ -366,7 +366,9 @@ export class SeedService implements OnApplicationBootstrap {
     for (const role of [Role.REFEREE, Role.MEDICAL, Role.SUPPLY, Role.VOLUNTEER]) {
       await this.notifications.save(this.notifications.create({ raceId: raceB.id, eventId: evWeather.id, targetRole: role, title: '[WEATHER] 午后阵雨，西岭下坡路段湿滑', message: '请各岗位注意雨天预案。', createdAt: new Date(`${day}T10:45:00`) }));
     }
-    await this.notifications.save(this.notifications.create({ raceId: raceB.id, eventId: evChip.id, targetRole: Role.REFEREE, title: '[CHIP_MISREAD] 计时点·西岭顶漏读号码 F002', message: '请人工核对补录。', createdAt: new Date(`${day}T11:05:00`) }));
+    for (const role of [Role.REFEREE, Role.MEDICAL, Role.SUPPLY, Role.VOLUNTEER]) {
+      await this.notifications.save(this.notifications.create({ raceId: raceB.id, eventId: evChip.id, targetRole: role, title: '[CHIP_MISREAD] 计时点·西岭顶漏读号码 F002', message: '请人工核对补录。', createdAt: new Date(`${day}T11:05:00`) }));
+    }
     await this.notifications.save(this.notifications.create({ raceId: raceB.id, targetRole: Role.VOLUNTEER, targetGroupId: gB3.id, title: '退赛接驳请求', message: '号码 G001 在维修点·谷口退赛，需要接驳。', createdAt: new Date(`${day}T10:20:00`) }));
 
     // 申诉：赵敏就芯片漏读申诉成绩
@@ -401,7 +403,7 @@ export class SeedService implements OnApplicationBootstrap {
     await this.tl(raceB.id, TimelineType.EVENT, '赛道事件[WEATHER] 午后阵雨，西岭下坡路段湿滑 → 已通知 REFEREE/MEDICAL/SUPPLY/VOLUNTEER', { actorId: admin.id, actorName: admin.displayName, refType: 'event', refId: evWeather.id, createdAt: T('10:45') });
     await this.tl(raceB.id, TimelineType.REFEREE_INSTRUCTION, '裁判指令：因降雨，西岭下坡段限速 30km/h，禁止超车（影响组别：精英组、大众组）', { actorId: referee.id, actorName: referee.displayName, groupIds: [gB1.id, gB2.id], createdAt: T('10:50') });
     await this.tl(raceB.id, TimelineType.RIDER_NOTIFICATION, '选手通知：雨天路滑，下坡控速，补给点2 增设热饮（影响组别：全部）', { actorId: admin.id, actorName: admin.displayName, createdAt: T('10:52') });
-    await this.tl(raceB.id, TimelineType.EVENT, '赛道事件[CHIP_MISREAD] 计时点·西岭顶漏读号码 F002 → 已通知 REFEREE', { actorId: referee.id, actorName: referee.displayName, groupIds: [gB2.id], refType: 'event', refId: evChip.id, createdAt: T('11:05') });
+    await this.tl(raceB.id, TimelineType.EVENT, '赛道事件[CHIP_MISREAD] 计时点·西岭顶漏读号码 F002 → 已通知 REFEREE/MEDICAL/SUPPLY/VOLUNTEER', { actorId: referee.id, actorName: referee.displayName, groupIds: [gB2.id], refType: 'event', refId: evChip.id, createdAt: T('11:05') });
     await this.tl(raceB.id, TimelineType.RESULT, '成绩产生：号码 E001 净成绩 1:38:17', { actorId: referee.id, actorName: referee.displayName, groupIds: [gB1.id], createdAt: T('09:40') });
     await this.tl(raceB.id, TimelineType.RESULT, '成绩产生：号码 E002 净成绩 1:43:57', { actorId: referee.id, actorName: referee.displayName, groupIds: [gB1.id], createdAt: T('09:46') });
     await this.tl(raceB.id, TimelineType.RESULT, '成绩产生：号码 F001 净成绩 2:11:33', { actorId: referee.id, actorName: referee.displayName, groupIds: [gB2.id], createdAt: T('10:43') });

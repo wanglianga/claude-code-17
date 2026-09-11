@@ -251,12 +251,15 @@ export class SuppliesController {
 
 // ---------------- 赛道事件与通知 ----------------
 
+/** 五类赛道事件均通知：裁判 / 医疗 / 补给 / 志愿者 */
+const ALL_POSTS: Role[] = [Role.REFEREE, Role.MEDICAL, Role.SUPPLY, Role.VOLUNTEER];
+
 const EVENT_TARGETS: Record<string, Role[]> = {
-  [EventType.GROUP_STUCK]: [Role.REFEREE, Role.MEDICAL, Role.SUPPLY, Role.VOLUNTEER],
-  [EventType.WEATHER]: [Role.REFEREE, Role.MEDICAL, Role.SUPPLY, Role.VOLUNTEER],
-  [EventType.CRASH]: [Role.MEDICAL, Role.REFEREE, Role.VOLUNTEER],
-  [EventType.CHIP_MISREAD]: [Role.REFEREE],
-  [EventType.TRAFFIC_LIFTED]: [Role.REFEREE, Role.SUPPLY, Role.VOLUNTEER],
+  [EventType.GROUP_STUCK]: ALL_POSTS,
+  [EventType.WEATHER]: ALL_POSTS,
+  [EventType.CRASH]: ALL_POSTS,
+  [EventType.CHIP_MISREAD]: ALL_POSTS,
+  [EventType.TRAFFIC_LIFTED]: ALL_POSTS,
   [EventType.OTHER]: [Role.REFEREE],
 };
 
