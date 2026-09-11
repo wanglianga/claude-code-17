@@ -26,6 +26,7 @@ import {
   TimelineEntry,
   TimelineType,
   User,
+  WeatherAlert,
   Withdrawal,
 } from '../entities';
 
@@ -52,6 +53,7 @@ export class SeedService implements OnApplicationBootstrap {
     @InjectRepository(MedicalRecord) private medicalRecords: Repository<MedicalRecord>,
     @InjectRepository(Appeal) private appeals: Repository<Appeal>,
     @InjectRepository(TimelineEntry) private timeline: Repository<TimelineEntry>,
+    @InjectRepository(WeatherAlert) private weatherAlerts: Repository<WeatherAlert>,
   ) {}
 
   async onApplicationBootstrap() {
@@ -412,5 +414,101 @@ export class SeedService implements OnApplicationBootstrap {
     await this.tl(raceB.id, TimelineType.APPEAL, '申诉处理：号码 F002 的申诉 → UPHELD（裁判组核实芯片漏读属实，依据终点芯片与人工记录确认成绩有效，不影响排名。）', { actorId: referee.id, actorName: referee.displayName, groupIds: [gB2.id], refType: 'appeal', refId: appeal.id, createdAt: T('15:02') });
     await this.tl(raceB.id, TimelineType.RACE_STATUS, '赛事状态变更为 FINISHED', { actorId: admin.id, actorName: admin.displayName, createdAt: T('13:00') });
     await this.tl(raceB.id, TimelineType.RACE_STATUS, '赛事状态变更为 ARCHIVED：成绩、芯片记录、补给异常、医疗处置与申诉证据已归档', { actorId: admin.id, actorName: admin.displayName, createdAt: T('18:00') });
+
+    // ---------- 赛事 C：比赛日 · 天气突变赛段缩短演练场 ----------
+    const raceC = await this.races.save(
+      this.races.create({
+        name: '2026 沿江公路赛（天气应急演练场）',
+        description: '比赛进行中的赛事：已检录发车，选手分布在赛道不同位置，可演练大风预警→评估→裁判确认缩短赛段→任务重生成→关门核验全流程。',
+        raceDate: '2026-09-11',
+        location: '滨江广场 - 开发区广场',
+        status: RaceStatus.RACE_DAY,
+      }),
+    );
+    const gC1 = await this.groups.save(this.groups.create({ raceId: raceC.id, name: '精英组', code: 'H', minAge: 18, maxAge: 45, allowedVehicleTypes: ['ROAD', 'GRAVEL'], minExperienceYears: 2, capacity: 60, requiresInsurance: true, maxMedicalRisk: 'MEDIUM', startTime: '08:00', sortOrder: 1 }));
+    const gC2 = await this.groups.save(this.groups.create({ raceId: raceC.id, name: '大众组', code: 'I', minAge: 16, maxAge: 65, allowedVehicleTypes: ['ROAD', 'GRAVEL', 'MOUNTAIN'], minExperienceYears: 0, capacity: 160, requiresInsurance: true, maxMedicalRisk: 'MEDIUM', startTime: '08:30', sortOrder: 2 }));
+
+    const routeC = await this.routes.save(
+      this.routes.create({ raceId: raceC.id, name: '沿江公路 60km', distanceKm: 60, status: 'CONFIRMED', confirmedById: admin.id, confirmedAt: new Date('2026-09-09T10:00:00Z'), notes: '沿江开阔路段为主，横风风险高。' }),
+    );
+    const ptsCDef: Array<Record<string, any>> = [
+      { type: PointType.START, name: '起点·滨江广场', kmMark: 0, sequence: 1, trafficControlStart: '07:00', trafficControlEnd: '09:30', description: '集结发车区', staffed: true },
+      { type: PointType.SUPPLY, name: '补给点1·望江亭', kmMark: 12, sequence: 2, trafficControlStart: '07:30', trafficControlEnd: '13:00', waterStock: 200, gelStock: 120, description: '饮水+能量胶', staffed: true },
+      { type: PointType.MEDICAL, name: '医疗点·湿地公园', kmMark: 26, sequence: 3, trafficControlStart: '08:00', trafficControlEnd: '14:30', medicalCapacity: 4, description: '救护车驻点，容量 4 人', staffed: true },
+      { type: PointType.TIMING, name: '计时点·跨江大桥', kmMark: 28, sequence: 4, trafficControlStart: '08:00', trafficControlEnd: '14:00', description: '关键路口，过桥后进入沿江开阔赛段', staffed: true },
+      { type: PointType.SUPPLY, name: '补给点2·轮渡码头', kmMark: 40, sequence: 5, trafficControlStart: '08:30', trafficControlEnd: '15:00', waterStock: 160, gelStock: 100, description: '饮水+能量胶', staffed: true },
+      { type: PointType.TIMING, name: '计时点·风车岭', kmMark: 48, sequence: 6, description: '远郊计时点（无固定岗位，流动裁判巡查）', staffed: false },
+      { type: PointType.TRAFFIC_CONTROL, name: '管制点·渔港路口', kmMark: 52, sequence: 7, trafficControlStart: '08:30', trafficControlEnd: '15:00', description: '社会车辆交叉路口', staffed: true },
+      { type: PointType.FINISH, name: '终点·开发区广场', kmMark: 60, sequence: 8, trafficControlStart: '09:00', trafficControlEnd: '16:00', description: '冲刺颁奖区', staffed: true },
+    ];
+    const ptsC: RoutePoint[] = [];
+    for (const p of ptsCDef) ptsC.push(await this.points.save(this.points.create({ ...p, routeId: routeC.id })));
+    const [cStart, cSup1, cMed, cJunction, cSup2, cFarTiming] = ptsC;
+
+    // 报名 + 检录（全部通过）
+    const mkRegC = async (rider: User, group: RaceGroup, bib: string, risk = 'LOW') =>
+      this.registrations.save(
+        this.registrations.create({ raceId: raceC.id, groupId: group.id, riderId: rider.id, status: RegStatus.APPROVED, decisionReason: '自动审核通过', medicalRisk: risk, bibNumber: bib, chipId: `CHIP-${bib}` }),
+      );
+    const rcDefs: Array<[User, RaceGroup, string]> = [
+      [riders.rider1, gC1, 'H001'],
+      [riders.rider2, gC1, 'H002'],
+      [riders.rider8, gC1, 'H003'],
+      [riders.rider3, gC2, 'I001'],
+      [riders.rider4, gC2, 'I002'],
+      [riders.rider6, gC2, 'I003'],
+    ];
+    const regsC: Record<string, Registration> = {};
+    const dayC = '2026-09-11';
+    for (const [rider, group, bib] of rcDefs) {
+      const reg = await mkRegC(rider, group, bib, bib === 'I002' ? 'MEDIUM' : 'LOW');
+      regsC[bib] = reg;
+      await this.checkIns.save(this.checkIns.create({
+        registrationId: reg.id, checkedById: checkin.id,
+        idVerified: true, helmetOk: true, numberPlateOk: true, chipOk: true, brakesOk: true, insuranceOk: true,
+        status: 'PASSED', notes: '',
+      }));
+    }
+    // 芯片：H001/H002 已过关键路口(28km)；H003/I001/I002 在关键路口之后（12km）；I003 尚未过补给点1
+    const chipC = async (bib: string, point: RoutePoint, time: string) =>
+      this.chips.save(this.chips.create({ raceId: raceC.id, registrationId: regsC[bib].id, routePointId: point.id, readAt: new Date(`${dayC}T${time}`), source: 'AUTO' }));
+    await chipC('H001', cStart, '08:00:05'); await chipC('H001', cSup1, '08:35:00'); await chipC('H001', cJunction, '09:10:00');
+    await chipC('H002', cStart, '08:00:09'); await chipC('H002', cSup1, '08:44:00'); await chipC('H002', cJunction, '09:25:00');
+    await chipC('H003', cStart, '08:01:00'); await chipC('H003', cSup1, '09:05:00');
+    await chipC('I001', cStart, '08:30:06'); await chipC('I001', cSup1, '09:20:00');
+    await chipC('I002', cStart, '08:30:12'); await chipC('I002', cSup1, '09:35:00');
+    await chipC('I003', cStart, '08:31:00');
+
+    // 补给消耗（望江亭已发放部分物资，演示库存变化）
+    await this.supplyRecords.save(this.supplyRecords.create({ raceId: raceC.id, routePointId: cSup1.id, registrationId: regsC['H001'].id, water: 1, gels: 1, repairParts: 0, note: '', recordedById: supply.id, passedAt: new Date(`${dayC}T08:35:00`) }));
+    await this.supplyRecords.save(this.supplyRecords.create({ raceId: raceC.id, routePointId: cSup1.id, registrationId: regsC['I001'].id, water: 2, gels: 1, repairParts: 0, note: '高温体感，多取一瓶水', recordedById: supply.id, passedAt: new Date(`${dayC}T09:20:00`) }));
+
+    // 医疗占用：湿地公园医疗点 1 名 MODERATE 留观（容量 4 → 空余 3）
+    await this.medicalRecords.save(this.medicalRecords.create({
+      raceId: raceC.id, registrationId: null, routePointId: cMed.id, groupId: gC1.id,
+      condition: '横风中暑征兆，头晕恶心（赛道观众/工作人员）', treatment: '转移至阴凉处，冰敷补液，留观', severity: 'MODERATE', outcome: '留观中', handledById: medic.id,
+    }));
+
+    // 大风预警（已录入，待运营评估）
+    const evWind = await this.events.save(this.events.create({
+      raceId: raceC.id, type: EventType.WEATHER, severity: 'CRITICAL',
+      title: '大风预警：阵风 8-9 级，沿江开阔赛段',
+      description: '气象台 10:30 发布：33km 以后沿江、渔港路口至终点赛段阵风 8-9 级，预计 15:30 减弱，存在侧滑与吹翻风险。',
+      status: 'OPEN', createdById: admin.id,
+    }));
+    const alertC = await this.weatherAlerts.save(this.weatherAlerts.create({
+      raceId: raceC.id, kind: 'WIND', severity: 'CRITICAL',
+      title: '阵风 8-9 级，沿江及渔港路口赛段',
+      description: '33km 以后沿江开阔赛段阵风 8-9 级，预计 15:30 减弱。',
+      issuedAt: '10:30', effectiveUntil: '15:30', affectedFromKm: 33, affectedToKm: 60,
+      groupIds: null, eventId: evWind.id, createdById: admin.id,
+    }));
+    for (const role of [Role.REFEREE, Role.MEDICAL, Role.SUPPLY, Role.VOLUNTEER]) {
+      await this.notifications.save(this.notifications.create({ raceId: raceC.id, eventId: evWind.id, targetRole: role, title: '[WEATHER] 大风预警：阵风 8-9 级，沿江开阔赛段', message: '预警时段 10:30-15:30，请各岗位做好缩短赛段预案。' }));
+    }
+
+    await this.tl(raceC.id, TimelineType.ROUTE_CONFIRMED, '路线「沿江公路 60km」已确认（60km，8 个点位，含 2 个计时点、2 个补给点、1 个医疗点）', { actorId: admin.id, actorName: admin.displayName });
+    await this.tl(raceC.id, TimelineType.RACE_STATUS, '赛事状态变更为 RACE_DAY', { actorId: admin.id, actorName: admin.displayName });
+    await this.tl(raceC.id, TimelineType.EVENT, `赛道事件[WEATHER] 大风预警：阵风 8-9 级，沿江开阔赛段 → 已通知 REFEREE/MEDICAL/SUPPLY/VOLUNTEER`, { actorId: admin.id, actorName: admin.displayName, refType: 'weather_alert', refId: alertC.id });
   }
 }

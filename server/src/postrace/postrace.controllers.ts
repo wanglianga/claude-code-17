@@ -26,9 +26,12 @@ import {
   Registration,
   Role,
   RoutePoint,
+  ShorteningTask,
+  StageShortening,
   SupplyRecord,
   TimelineType,
   User,
+  WeatherAlert,
   Withdrawal,
 } from '../entities';
 import { CurrentUser, Roles } from '../auth/guards';
@@ -159,6 +162,9 @@ export class ArchiveController {
     @InjectRepository(Appeal) private appeals: Repository<Appeal>,
     @InjectRepository(Withdrawal) private withdrawals: Repository<Withdrawal>,
     @InjectRepository(RaceEvent) private events: Repository<RaceEvent>,
+    @InjectRepository(WeatherAlert) private alerts: Repository<WeatherAlert>,
+    @InjectRepository(StageShortening) private shortenings: Repository<StageShortening>,
+    @InjectRepository(ShorteningTask) private shorteningTasks: Repository<ShorteningTask>,
     @InjectRepository(RaceRoute) private routes: Repository<RaceRoute>,
     @InjectRepository(RoutePoint) private points: Repository<RoutePoint>,
     @InjectRepository(User) private users: Repository<User>,
@@ -203,7 +209,9 @@ export class ArchiveController {
         riderName: rider?.displayName || '',
         group: groupName(r.groupId),
         status: r.status,
+        resultRule: r.resultRule,
         netSeconds: r.netSeconds,
+        junctionPassedAt: r.junctionPassedAt,
         chips: riderChips,
       });
     }
@@ -234,6 +242,32 @@ export class ArchiveController {
       appealsWithEvidence.push({ ...a, bibNumber: reg?.bibNumber || '' });
     }
 
+    // 天气预警与赛段缩短决策链（预警 → 评估 → 裁判确认 → 任务/签收 → 两类成绩规则）
+    const alerts = await this.alerts.find({ where: { raceId }, order: { createdAt: 'ASC' } });
+    const shorteningRows = await this.shortenings.find({ where: { raceId }, order: { createdAt: 'ASC' } });
+    const shorteningTasks = await this.shorteningTasks.find({ where: { raceId }, order: { createdAt: 'ASC' } });
+    const shortenings = [];
+    for (const s of shorteningRows) {
+      const alert = alerts.find((a) => a.id === s.alertId);
+      const j = points.find((p) => p.id === s.newFinishPointId);
+      shortenings.push({
+        id: s.id,
+        status: s.status,
+        alert: alert ? { kind: alert.kind, title: alert.title, issuedAt: alert.issuedAt, effectiveUntil: alert.effectiveUntil } : null,
+        junction: j ? { name: j.name, kmMark: j.kmMark } : null,
+        cutoffPlan: JSON.parse(s.cutoffPlanJson),
+        assessmentSummary: s.assessmentSummary,
+        proposedAt: s.proposedAt,
+        confirmedAt: s.confirmedAt,
+        notifiedPostCount: s.notifiedPostIds?.length || 0,
+        acknowledgedPostCount: s.acknowledgedPostIds?.length || 0,
+        unnotifiedTasks: shorteningTasks.filter((t) => t.shorteningId === s.id && t.unnotified).length,
+        tasks: shorteningTasks
+          .filter((t) => t.shorteningId === s.id)
+          .map((t) => ({ kind: t.kind, title: t.title, status: t.status, unnotified: t.unnotified, detail: t.detail })),
+      });
+    }
+
     return {
       race,
       groups,
@@ -253,6 +287,7 @@ export class ArchiveController {
       withdrawals,
       events,
       appeals: appealsWithEvidence,
+      shortenings,
       timeline,
     };
   }

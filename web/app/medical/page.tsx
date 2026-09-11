@@ -5,7 +5,8 @@ import Nav from '@/components/Nav';
 import { Badge, ErrorBox, OkBox, useRequireRole } from '@/components/ui';
 import { api } from '@/lib/api';
 import { EVENT_TYPES, POINT_TYPES, RACE_STATUS, SEVERITY, fmtTime } from '@/lib/labels';
-
+import { ShorteningBanner } from '@/components/ShorteningBanner';
+import ShorteningTaskBoard from '@/components/ShorteningTaskBoard';
 export default function MedicalPage() {
   const { ready } = useRequireRole('MEDICAL', 'OPS');
   const [races, setRaces] = useState<any[]>([]);
@@ -71,6 +72,10 @@ export default function MedicalPage() {
               {races.map((r) => <option key={r.id} value={r.id}>{r.name}（{RACE_STATUS[r.status]?.[0]}）</option>)}
             </select>
           </h2>
+          <ShorteningBanner raceId={raceId} />
+          <div style={{ marginBottom: 14 }}>
+            <ShorteningTaskBoard raceId={raceId} canAck={true} postsOnly pointTypes={['MEDICAL', 'SUPPLY', 'FINISH', 'TIMING']} />
+          </div>
           <div className="grid2">
             <div>
               <h3>医疗相关事件</h3>

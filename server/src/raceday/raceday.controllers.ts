@@ -38,7 +38,7 @@ import {
 } from '../entities';
 import { CurrentUser, Roles } from '../auth/guards';
 import { TimelineService } from '../timeline/timeline.module';
-
+import { ShorteningService } from '../shortening/shortening.service';
 // ---------------- 检录 ----------------
 
 class CheckInDto {
@@ -543,9 +543,10 @@ export class ResultsController {
     @InjectRepository(CheckIn) private checkIns: Repository<CheckIn>,
     @InjectRepository(User) private users: Repository<User>,
     private timeline: TimelineService,
+    private shortening: ShorteningService,
   ) {}
 
-  /** 录入芯片记录；若点位是终点则自动计算净成绩 */
+  /** 录入芯片记录；原终点自动计净成绩；赛段缩短后在新终点过点 → 关门核验（关门前=关门点成绩，超时=DNF） */
   @Roles(Role.REFEREE, Role.OPS)
   @Post('chips')
   async recordChip(@Body() dto: ChipDto, @CurrentUser() user: any) {
@@ -563,8 +564,21 @@ export class ResultsController {
         createdById: user.id,
       }),
     );
+    // 赛段缩短已确认：该点位为新终点时走关门核验（只处理"未通过关键路口"的选手）
+    const confirmed = await this.shortening.confirmedForRace(reg.raceId);
+    if (confirmed && confirmed.newFinishPointId === point.id) {
+      const existing = await this.results.findOne({ where: { registrationId: reg.id } });
+      if (existing?.resultRule === 'BEHIND_CUTOFF') {
+        const verdict = await this.shortening.verifyCutoff(confirmed.id, user, {
+          regId: reg.id,
+          readAt: chip.readAt,
+        });
+        const result = await this.results.findOne({ where: { registrationId: reg.id } });
+        return { chip, result, cutoffVerdict: verdict };
+      }
+    }
     let result = null;
-    if (point.type === PointType.FINISH) {
+    if (point.type === PointType.FINISH && point.isActive) {
       result = await this.computeResult(reg, user);
     }
     return { chip, result };
@@ -634,6 +648,8 @@ export class ResultsController {
       if (ci?.status !== 'PASSED') continue;
       const done = await this.results.findOne({ where: { registrationId: reg.id } });
       if (done?.status === 'FINISHED') continue;
+      // 赛段缩短产生的成绩（关门核验中/已过关键路口）不由模拟流程处理
+      if (done && ['PASSED_JUNCTION', 'BEHIND_CUTOFF', 'PASSED_CUTOFF'].includes(done.resultRule)) continue;
       const group = await this.groups.findOne({ where: { id: reg.groupId } });
       const startTime = new Date(`${race.raceDate}T${group?.startTime || '08:00'}:00`);
       const jitterSec = Math.floor(Math.random() * 120);
@@ -653,11 +669,15 @@ export class ResultsController {
     return { created };
   }
 
-  /** 成绩榜（按组别排名，用于颁奖） */
+  /** 成绩榜（按组别排名，用于颁奖）；赛段缩短后已过关键路口与关门点成绩分开排名 */
   @Get('race/:raceId')
   async rankings(@Param('raceId') raceId: string) {
     const results = await this.results.find({ where: { raceId } });
     const groups = await this.groups.find({ where: { raceId }, order: { sortOrder: 'ASC' } });
+    const shortening = await this.shortening.confirmedForRace(raceId);
+    const junction = shortening
+      ? await this.points.findOne({ where: { id: shortening.newFinishPointId } })
+      : null;
     const rows = [];
     for (const r of results) {
       const reg = await this.registrations.findOne({ where: { id: r.registrationId } });
@@ -671,14 +691,34 @@ export class ResultsController {
     }
     const byGroup = groups.map((g) => {
       const inGroup = rows.filter((r) => r.groupId === g.id);
-      const finished = inGroup
-        .filter((r) => r.status === 'FINISHED' && r.netSeconds != null)
+      // 有效成绩：正常完赛、已过关键路口（按过点计时）、关门前到达（关门点成绩）
+      const timeable = inGroup.filter(
+        (r) => r.status === 'FINISHED' && r.netSeconds != null && ['NORMAL', 'PASSED_JUNCTION', 'PASSED_CUTOFF'].includes(r.resultRule),
+      );
+      // 已过关键路口与其他有效成绩分别排名（不同记录规则不混排）
+      const junctionFinishers = timeable
+        .filter((r) => r.resultRule === 'PASSED_JUNCTION')
+        .sort((a, b) => (a.junctionPassedAt ? +new Date(a.junctionPassedAt) : 0) - (b.junctionPassedAt ? +new Date(b.junctionPassedAt) : 0))
+        .map((r, i) => ({ ...r, rank: i + 1 }));
+      const normalFinishers = timeable
+        .filter((r) => r.resultRule !== 'PASSED_JUNCTION')
         .sort((a, b) => a.netSeconds - b.netSeconds)
         .map((r, i) => ({ ...r, rank: i + 1 }));
+      const finished = [...junctionFinishers, ...normalFinishers].sort((a, b) => a.rank - b.rank);
       const others = inGroup.filter((r) => !(r.status === 'FINISHED' && r.netSeconds != null));
       return { group: g, finished, others };
     });
-    return byGroup;
+    return {
+      groups: byGroup,
+      shortening: shortening
+        ? {
+            id: shortening.id,
+            junction: junction ? { id: junction.id, name: junction.name, kmMark: junction.kmMark } : null,
+            cutoffPlan: JSON.parse(shortening.cutoffPlanJson),
+            confirmedAt: shortening.confirmedAt,
+          }
+        : null,
+    };
   }
 
   /** 某选手的芯片记录 */

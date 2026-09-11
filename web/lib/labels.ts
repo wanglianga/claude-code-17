@@ -58,6 +58,44 @@ export const TIMELINE_TYPES: Record<string, [string, string]> = {
   SUPPLY_ANOMALY: ['补给异常', 'red'],
   RESULT: ['成绩', 'green'],
   APPEAL: ['申诉', 'purple'],
+  STAGE_SHORTENING: ['赛段缩短', 'red'],
+};
+
+export const WEATHER_KINDS: Record<string, string> = {
+  WIND: '大风',
+  RAIN: '暴雨',
+  HEAT: '高温',
+};
+
+export const WEATHER_SEVERITY: Record<string, [string, string]> = {
+  INFO: ['蓝色', 'blue'],
+  WARNING: ['黄色', 'orange'],
+  CRITICAL: ['红色', 'red'],
+};
+
+export const SHORTENING_STATUS: Record<string, [string, string]> = {
+  PROPOSED: ['待裁判确认', 'orange'],
+  CONFIRMED: ['已确认生效', 'red'],
+  CANCELLED: ['已取消', 'gray'],
+};
+
+export const RESULT_RULES: Record<string, [string, string]> = {
+  NORMAL: ['正常终点', 'green'],
+  PASSED_JUNCTION: ['已过路口·过点计时', 'blue'],
+  BEHIND_CUTOFF: ['关门核验中', 'orange'],
+  PASSED_CUTOFF: ['关门前到达·关门点成绩', 'blue'],
+};
+
+export const SHORT_TASK_KINDS: Record<string, [string, string]> = {
+  SUPPLY: ['补给物资', 'green'],
+  SHUTTLE: ['接驳车辆', 'orange'],
+  STATION: ['志愿者站位', 'blue'],
+};
+
+export const SHORT_TASK_STATUS: Record<string, [string, string]> = {
+  PENDING: ['待处理', 'orange'],
+  DONE: ['已完成', 'green'],
+  UNNOTIFIED: ['未接到通知', 'red'],
 };
 
 export const VEHICLE_TYPES: Record<string, string> = {

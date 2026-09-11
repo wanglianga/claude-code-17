@@ -5,6 +5,8 @@ import Nav from '@/components/Nav';
 import { Badge, ErrorBox, useRequireRole } from '@/components/ui';
 import { api } from '@/lib/api';
 import { RACE_STATUS, fmtTime } from '@/lib/labels';
+import { ShorteningBanner } from '@/components/ShorteningBanner';
+import ShorteningTaskBoard from '@/components/ShorteningTaskBoard';
 
 export default function VolunteerPage() {
   const { ready } = useRequireRole('VOLUNTEER', 'OPS');
@@ -35,6 +37,7 @@ export default function VolunteerPage() {
       <Nav />
       <div className="container">
         <ErrorBox error={error} />
+        <ShorteningBanner raceId={raceId} />
         <div className="grid2">
           <div className="card">
             <h2>岗位通知（裁判/运营/事件推送）</h2>
@@ -95,6 +98,10 @@ export default function VolunteerPage() {
               </tbody>
             </table>
           </div>
+        </div>
+        <div className="card">
+          <h2>赛段缩短任务单（物资接驳 / 车辆接驳 / 站位 / 紧急封路）</h2>
+          <ShorteningTaskBoard raceId={raceId} roleFilter="VOLUNTEER" canAck={true} />
         </div>
       </div>
     </div>

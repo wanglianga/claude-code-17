@@ -8,6 +8,7 @@ import { TimelineModule } from './timeline/timeline.module';
 import { RacesModule } from './races/races.module';
 import { RegistrationsModule } from './registrations/registrations.module';
 import { RaceDayModule } from './raceday/raceday.module';
+import { ShorteningModule } from './shortening/shortening.module';
 import { PostRaceModule } from './postrace/postrace.module';
 import { ProfileModule } from './profile/profile.module';
 import { SeedModule } from './seed/seed.module';
@@ -39,6 +40,7 @@ class HealthController {
     RacesModule,
     RegistrationsModule,
     RaceDayModule,
+    ShorteningModule,
     PostRaceModule,
     SeedModule,
   ],

@@ -26,9 +26,11 @@ import {
   SuppliesController,
   WithdrawalsController,
 } from './raceday.controllers';
+import { ShorteningModule } from '../shortening/shortening.module';
 
 @Module({
   imports: [
+    ShorteningModule,
     TypeOrmModule.forFeature([
       CheckIn,
       ChipRecord,

@@ -11,8 +11,11 @@ import {
   RaceRoute,
   Registration,
   RoutePoint,
+  ShorteningTask,
+  StageShortening,
   SupplyRecord,
   User,
+  WeatherAlert,
   Withdrawal,
 } from '../entities';
 import { AppealsController, ArchiveController, TimelineController } from './postrace.controllers';
@@ -30,8 +33,11 @@ import { AppealsController, ArchiveController, TimelineController } from './post
       RaceRoute,
       Registration,
       RoutePoint,
+      ShorteningTask,
+      StageShortening,
       SupplyRecord,
       User,
+      WeatherAlert,
       Withdrawal,
     ]),
   ],

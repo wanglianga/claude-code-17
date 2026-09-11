@@ -80,6 +80,8 @@ class PointDto {
   @Type(() => Number) @IsInt() @IsOptional() waterStock?: number;
   @Type(() => Number) @IsInt() @IsOptional() gelStock?: number;
   @Type(() => Number) @IsInt() @IsOptional() partsStock?: number;
+  @Type(() => Number) @IsInt() @Min(0) @IsOptional() medicalCapacity?: number;
+  @IsBoolean() @IsOptional() staffed?: boolean;
   @IsArray() @IsOptional() groupIds?: string[]; // 关联组别（空=全部）
 }
 

@@ -5,6 +5,8 @@ import Nav from '@/components/Nav';
 import { Badge, ErrorBox, OkBox, useRequireRole } from '@/components/ui';
 import { api } from '@/lib/api';
 import { RACE_STATUS, VEHICLE_TYPES } from '@/lib/labels';
+import { ShorteningBanner } from '@/components/ShorteningBanner';
+import ShorteningTaskBoard from '@/components/ShorteningTaskBoard';
 
 const CHECK_ITEMS: Array<[string, string]> = [
   ['idVerified', '证件核验'],
@@ -82,6 +84,12 @@ export default function CheckInPage() {
           </h2>
           {race && race.status !== 'RACE_DAY' && (
             <div className="alert info">该赛事当前状态为「{RACE_STATUS[race.status]?.[0]}」，检录仅比赛日可提交（可预览名单）。</div>
+          )}
+          <ShorteningBanner raceId={raceId} />
+          {race?.status === 'RACE_DAY' && (
+            <div style={{ marginBottom: 14 }}>
+              <ShorteningTaskBoard raceId={raceId} canAck={true} postsOnly pointTypes={['START', 'FINISH', 'TIMING', 'TRAFFIC_CONTROL']} />
+            </div>
           )}
           <div className="tabs">
             <button className={tab === 'checkin' ? 'active' : ''} onClick={() => setTab('checkin')}>检录名单（{rows.length}）</button>

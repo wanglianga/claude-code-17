@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { APPEAL_STATUS, EVENT_TYPES, RESULT_STATUS, fmtSeconds, fmtTime } from '@/lib/labels';
+import { APPEAL_STATUS, EVENT_TYPES, RESULT_RULES, RESULT_STATUS, SHORT_TASK_KINDS, SHORTENING_STATUS, WEATHER_KINDS, fmtSeconds, fmtTime } from '@/lib/labels';
 import { Badge } from './ui';
 
 export default function ArchiveView({ raceId }: { raceId: string }) {
@@ -33,7 +33,7 @@ export default function ArchiveView({ raceId }: { raceId: string }) {
         {data.results.length === 0 ? <div className="muted">无成绩记录</div> : (
           <table>
             <thead>
-              <tr><th>号码</th><th>选手</th><th>组别</th><th>状态</th><th>净成绩</th><th>芯片记录</th></tr>
+              <tr><th>号码</th><th>选手</th><th>组别</th><th>状态</th><th>成绩规则</th><th>净成绩</th><th>芯片记录</th></tr>
             </thead>
             <tbody>
               {data.results.map((r: any, i: number) => (
@@ -42,6 +42,7 @@ export default function ArchiveView({ raceId }: { raceId: string }) {
                   <td>{r.riderName}</td>
                   <td>{r.group}</td>
                   <td><Badge color={RESULT_STATUS[r.status]?.[1] || 'gray'}>{RESULT_STATUS[r.status]?.[0] || r.status}</Badge></td>
+                  <td>{r.resultRule && r.resultRule !== 'NORMAL' ? <Badge color={RESULT_RULES[r.resultRule]?.[1] || 'gray'}>{RESULT_RULES[r.resultRule]?.[0] || r.resultRule}</Badge> : '—'}</td>
                   <td>{fmtSeconds(r.netSeconds)}</td>
                   <td className="small muted">
                     {r.chips.map((c: any, j: number) => (
@@ -145,6 +146,48 @@ export default function ArchiveView({ raceId }: { raceId: string }) {
             </table>
           )}
         </div>
+      </div>
+
+      <div className="card">
+        <h2>天气突变 · 赛段缩短决策链</h2>
+        {(!data.shortenings || data.shortenings.length === 0) ? <div className="muted">无赛段缩短记录</div> : (
+          <div>
+            {data.shortenings.map((s: any) => (
+              <div key={s.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                <h3 style={{ margin: 0 }}>
+                  {s.alert ? `${WEATHER_KINDS[s.alert.kind] || s.alert.kind}预警：${s.alert.title}` : '赛段缩短'}
+                  <Badge color={SHORTENING_STATUS[s.status]?.[1]}>{SHORTENING_STATUS[s.status]?.[0] || s.status}</Badge>
+                </h3>
+                <div className="small muted">
+                  预警时段 {s.alert?.issuedAt}-{s.alert?.effectiveUntil} · 新终点 {s.junction?.name}（{s.junction?.kmMark}km）
+                  {s.proposedAt && <> · 提交 {fmtTime(s.proposedAt)}</>}{s.confirmedAt && <> · 裁判确认 {fmtTime(s.confirmedAt)}</>}
+                  {' '}· 岗位通知 {s.notifiedPostCount}，签收 {s.acknowledgedPostCount}，未接到通知 {s.unnotifiedTasks}
+                </div>
+                <table>
+                  <thead><tr><th>组别</th><th>新关门时间</th><th>已过关键路口</th><th>未通过</th></tr></thead>
+                  <tbody>
+                    {s.cutoffPlan.map((p: any) => (
+                      <tr key={p.groupId}><td>{p.groupName}</td><td><strong>{p.cutoffTime}</strong></td><td>{p.ridersAhead}</td><td>{p.ridersBehind}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="small muted">评估依据：{s.assessmentSummary}</p>
+                <table>
+                  <thead><tr><th>任务类型</th><th>任务</th><th>状态</th></tr></thead>
+                  <tbody>
+                    {s.tasks.map((t: any, i: number) => (
+                      <tr key={i} style={t.unnotified ? { background: '#fff3f3' } : undefined}>
+                        <td><Badge color={SHORT_TASK_KINDS[t.kind]?.[1]}>{SHORT_TASK_KINDS[t.kind]?.[0] || t.kind}</Badge></td>
+                        <td className="small">{t.title}<div className="muted">{t.detail}</div></td>
+                        <td>{t.unnotified ? <Badge color="red">未接到通知</Badge> : t.status === 'DONE' ? <Badge color="green">已完成</Badge> : <Badge color="orange">待处理</Badge>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card">

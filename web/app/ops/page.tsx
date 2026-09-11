@@ -8,6 +8,8 @@ import ArchiveView from '@/components/ArchiveView';
 import { Badge, ErrorBox, OkBox, useRequireRole } from '@/components/ui';
 import { api } from '@/lib/api';
 import { POINT_TYPES, RACE_STATUS, REG_STATUS, RISK_LABELS, VEHICLE_TYPES, fmtTime } from '@/lib/labels';
+import WeatherShorteningPanel from '@/components/WeatherShorteningPanel';
+import ShorteningTaskBoard from '@/components/ShorteningTaskBoard';
 
 const NEXT_STATUS: Record<string, string[]> = {
   DRAFT: ['REGISTRATION_OPEN'],
@@ -94,7 +96,7 @@ export default function OpsPage() {
               <span className="muted small">{selected.raceDate} · {selected.location} · {selected.description}</span>
             </div>
             <div className="tabs">
-              {[['overview', '概览/状态'], ['groups', '组别规则'], ['route', '路线与点位'], ['regs', '报名审核'], ['results', '成绩'], ['timeline', '时间轴'], ['archive', '赛事档案']].map(([k, l]) => (
+              {[['overview', '概览/状态'], ['groups', '组别规则'], ['route', '路线与点位'], ['regs', '报名审核'], ['weather', '天气应急·缩短'], ['results', '成绩'], ['timeline', '时间轴'], ['archive', '赛事档案']].map(([k, l]) => (
                 <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>{l}</button>
               ))}
             </div>
@@ -102,6 +104,15 @@ export default function OpsPage() {
             {tab === 'groups' && <Groups race={selected} refresh={refresh} setError={setError} />}
             {tab === 'route' && <RouteEditor race={selected} refresh={refresh} setError={setError} />}
             {tab === 'regs' && <RegReview race={selected} refresh={refresh} setError={setError} />}
+            {tab === 'weather' && (
+              <div>
+                <WeatherShorteningPanel race={selected} onChange={() => refresh()} />
+                <div className="card">
+                  <h2>缩短任务与岗位签收看板</h2>
+                  <ShorteningTaskBoard raceId={selected.id} canAck={true} onChange={() => refresh()} />
+                </div>
+              </div>
+            )}
             {tab === 'results' && <div className="card"><h2>成绩榜（颁奖依据）</h2><SimulateButton race={selected} refresh={refresh} setError={setError} /><ResultsView raceId={selected.id} /></div>}
             {tab === 'timeline' && <div className="card"><h2>统一时间轴</h2><TimelineView raceId={selected.id} groups={selected.groups} /></div>}
             {tab === 'archive' && <ArchiveView raceId={selected.id} />}
@@ -262,7 +273,7 @@ function Groups({ race, refresh, setError }: any) {
   );
 }
 
-const EMPTY_POINT = { type: 'SUPPLY', name: '', kmMark: 0, sequence: 0, description: '', trafficControlStart: '', trafficControlEnd: '', waterStock: 0, gelStock: 0, partsStock: 0, groupIds: [] as string[] };
+const EMPTY_POINT = { type: 'SUPPLY', name: '', kmMark: 0, sequence: 0, description: '', trafficControlStart: '', trafficControlEnd: '', waterStock: 0, gelStock: 0, partsStock: 0, medicalCapacity: 0, staffed: true, groupIds: [] as string[] };
 
 function RouteEditor({ race, refresh, setError }: any) {
   const [routeForm, setRouteForm] = useState<any>({ name: '', distanceKm: 0, notes: '' });
@@ -279,7 +290,7 @@ function RouteEditor({ race, refresh, setError }: any) {
     try {
       await api(`races/${route.id}/points`, {
         method: 'POST',
-        body: { ...pointForm, kmMark: +pointForm.kmMark, sequence: +pointForm.sequence, waterStock: +pointForm.waterStock, gelStock: +pointForm.gelStock, partsStock: +pointForm.partsStock },
+        body: { ...pointForm, kmMark: +pointForm.kmMark, sequence: +pointForm.sequence, waterStock: +pointForm.waterStock, gelStock: +pointForm.gelStock, partsStock: +pointForm.partsStock, medicalCapacity: +pointForm.medicalCapacity },
       });
       setPointForm(EMPTY_POINT);
       await refresh('点位已添加');
@@ -324,15 +335,19 @@ function RouteEditor({ race, refresh, setError }: any) {
         </h2>
         {route.confirmedAt && <p className="muted small">确认时间：{fmtTime(route.confirmedAt)}</p>}
         {route.points.map((p: any) => (
-          <div className="point-row" key={p.id}>
+          <div className="point-row" key={p.id} style={p.isActive === false ? { opacity: 0.5 } : undefined}>
             <div className="km">{p.kmMark}km</div>
             <div className="grow">
               <strong>{p.name}</strong> <Badge color="blue">{POINT_TYPES[p.type]}</Badge>{' '}
+              {p.isActive === false && <Badge color="gray">路段撤销</Badge>}
+              {p.cutoffTime && <Badge color="red">关门 {p.cutoffTime}</Badge>}
+              {p.staffed === false && <Badge color="red">无人值守</Badge>}
               {p.trafficControlStart && <span className="small muted">管制 {p.trafficControlStart}-{p.trafficControlEnd}</span>}
               {p.description && <div className="small muted">{p.description}</div>}
               <div className="small muted">
                 {p.type === 'SUPPLY' && `库存：饮水 ${p.waterStock} / 能量胶 ${p.gelStock}　`}
                 {p.type === 'REPAIR' && `配件库存：${p.partsStock}　`}
+                {p.type === 'MEDICAL' && `医疗容量：${p.medicalCapacity || '不限'}　`}
                 关联组别：{p.groupIds?.length ? p.groupIds.map(groupName).join('、') : '全部组别'}
               </div>
             </div>
@@ -369,6 +384,16 @@ function RouteEditor({ race, refresh, setError }: any) {
               <div className="field"><label>维修配件库存</label><input type="number" value={pointForm.partsStock} onChange={(e) => setPointForm({ ...pointForm, partsStock: e.target.value })} /></div>
             </div>
           )}
+          {pointForm.type === 'MEDICAL' && (
+            <div className="form-row3">
+              <div className="field"><label>医疗容量（可同时处置人数）</label><input type="number" value={pointForm.medicalCapacity} onChange={(e) => setPointForm({ ...pointForm, medicalCapacity: e.target.value })} /></div>
+            </div>
+          )}
+          <div className="checks" style={{ gridTemplateColumns: '1fr' }}>
+            <label className={pointForm.staffed ? 'on' : ''}>
+              <input type="checkbox" checked={!!pointForm.staffed} onChange={(e) => setPointForm({ ...pointForm, staffed: e.target.checked })} /> 比赛日有岗位人员在岗（取消勾选=无人值守点位，缩短时将被标记为"未接到通知岗位"）
+            </label>
+          </div>
           <div className="field"><label>说明</label><input value={pointForm.description} onChange={(e) => setPointForm({ ...pointForm, description: e.target.value })} /></div>
           <div className="field">
             <label>关联组别（不选 = 全部组别适用）</label>

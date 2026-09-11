@@ -5,6 +5,8 @@ import Nav from '@/components/Nav';
 import { Badge, ErrorBox, OkBox, useRequireRole } from '@/components/ui';
 import { api } from '@/lib/api';
 import { POINT_TYPES, RACE_STATUS, fmtTime } from '@/lib/labels';
+import { ShorteningBanner } from '@/components/ShorteningBanner';
+import ShorteningTaskBoard from '@/components/ShorteningTaskBoard';
 
 export default function SupplyPage() {
   const { ready } = useRequireRole('SUPPLY', 'OPS');
@@ -59,7 +61,8 @@ export default function SupplyPage() {
   };
 
   if (!ready) return null;
-  const supplyPoints = (detail?.routes?.[0]?.points || []).filter((p: any) => ['SUPPLY', 'REPAIR'].includes(p.type));
+  const supplyPoints = (detail?.routes?.[0]?.points || []).filter((p: any) => ['SUPPLY', 'REPAIR'].includes(p.type) && p.isActive !== false);
+  const evacuatedPoints = (detail?.routes?.[0]?.points || []).filter((p: any) => ['SUPPLY', 'REPAIR'].includes(p.type) && p.isActive === false);
   const point = supplyPoints.find((p: any) => p.id === pointId);
   const race = races.find((r) => r.id === raceId);
 
@@ -76,6 +79,7 @@ export default function SupplyPage() {
             </select>
           </h2>
           {race?.status !== 'RACE_DAY' && <div className="alert info">仅比赛日可登记补给记录（当前可查看点位与库存）。</div>}
+          <ShorteningBanner raceId={raceId} />
           <div className="grid2">
             <div>
               <div className="field">
@@ -134,9 +138,17 @@ export default function SupplyPage() {
             </div>
           </div>
         </div>
+        {evacuatedPoints.length > 0 && (
+          <div className="alert info" style={{ marginTop: 12 }}>
+            撤销路段补给点：{evacuatedPoints.map((p: any) => `「${p.name}」`).join('、')} 已停止发放，库存按任务单前移，新关门时间 {evacuatedPoints[0]?.cutoffTime || '—'}。
+          </div>
+        )}
         <div className="card">
-          <h2>最近记录</h2>
-          <table>
+          <h2>缩短任务与岗位签收</h2>
+          <ShorteningTaskBoard raceId={raceId} roleFilter="SUPPLY" canAck={true} onChange={() => load(raceId)} />
+        </div>
+        <div className="card">
+          <h2>最近记录</h2>          <table>
             <thead><tr><th>时间</th><th>点位</th><th>选手</th><th>饮水</th><th>胶</th><th>配件</th><th>备注</th></tr></thead>
             <tbody>
               {(summary?.records || []).slice(0, 20).map((r: any) => (

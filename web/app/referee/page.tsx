@@ -6,7 +6,9 @@ import ResultsView from '@/components/ResultsView';
 import TimelineView from '@/components/TimelineView';
 import { Badge, ErrorBox, OkBox, useRequireRole } from '@/components/ui';
 import { api } from '@/lib/api';
-import { APPEAL_STATUS, EVENT_STATUS, EVENT_TYPES, POINT_TYPES, RACE_STATUS, SEVERITY, fmtTime } from '@/lib/labels';
+import { APPEAL_STATUS, EVENT_STATUS, EVENT_TYPES, POINT_TYPES, RACE_STATUS, SEVERITY, SHORTENING_STATUS, WEATHER_KINDS, fmtTime } from '@/lib/labels';
+import ShorteningTaskBoard from '@/components/ShorteningTaskBoard';
+import { ShorteningBanner } from '@/components/ShorteningBanner';
 
 export default function RefereePage() {
   const { ready } = useRequireRole('REFEREE', 'OPS');
@@ -47,12 +49,13 @@ export default function RefereePage() {
           </h2>
           {detail && (
             <div className="tabs">
-              {[['events', '赛道事件'], ['instruction', '发布指令'], ['appeals', '申诉处理'], ['timing', '计时/成绩'], ['timeline', '时间轴']].map(([k, l]) => (
+              {[['events', '赛道事件'], ['shortening', '赛段缩短'], ['instruction', '发布指令'], ['appeals', '申诉处理'], ['timing', '计时/成绩'], ['timeline', '时间轴']].map(([k, l]) => (
                 <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>{l}</button>
               ))}
             </div>
           )}
           {detail && tab === 'events' && <EventsTab race={detail} notify={notify} setError={setError} />}
+          {detail && tab === 'shortening' && <ShorteningTab race={detail} notify={notify} setError={setError} />}
           {detail && tab === 'instruction' && <InstructionTab race={detail} notify={notify} setError={setError} />}
           {detail && tab === 'appeals' && <AppealsTab race={detail} notify={notify} setError={setError} />}
           {detail && tab === 'timing' && <TimingTab race={detail} notify={notify} setError={setError} />}
@@ -223,12 +226,114 @@ function AppealsTab({ race, notify, setError }: any) {
   );
 }
 
+// ---------------- 赛段缩短确认 / 关门核验 ----------------
+
+function ShorteningTab({ race, notify, setError }: any) {
+  const [list, setList] = useState<any[]>([]);
+  const [pendingRiders, setPendingRiders] = useState<any[]>([]);
+  const load = async () => {
+    try {
+      const [ss, rankings] = await Promise.all([
+        api(`shortenings/race/${race.id}`),
+        api(`results/race/${race.id}`),
+      ]);
+      setList(ss);
+      const groups = rankings.groups || [];
+      const riders: any[] = [];
+      for (const g of groups) for (const r of g.others) if (r.resultRule === 'BEHIND_CUTOFF') riders.push({ ...r, groupName: g.group.name });
+      setPendingRiders(riders);
+    } catch (e: any) { setError(e.message); }
+  };
+  useEffect(() => { load(); }, [race.id]);
+
+  const confirm = async (s: any) => {
+    const note = prompt('确认备注（可选，如：按预案执行，10:50 生效）') || '';
+    try {
+      await api(`shortenings/${s.id}/confirm`, { method: 'POST', body: { note } });
+      notify('已确认：关门时间已下发，任务已重生成');
+      load();
+    } catch (e: any) { setError(e.message); }
+  };
+  const markArrival = async (s: any, regId: string) => {
+    try {
+      const r = await api(`shortenings/${s.id}/verify-cutoff`, { method: 'POST', body: { registrationId: regId } });
+      notify(`关门核验：通过 ${r.finalized} 人，超时 DNF ${r.missed} 人`);
+      load();
+    } catch (e: any) { setError(e.message); }
+  };
+  const closeAll = async (s: any) => {
+    if (!confirm('将所有未在关门前通过新终点的选手记为 DNF，确定？')) return;
+    try {
+      const r = await api(`shortenings/${s.id}/verify-cutoff`, { method: 'POST', body: { markMissed: true } });
+      notify(`已批量关门：DNF ${r.missed} 人`);
+      load();
+    } catch (e: any) { setError(e.message); }
+  };
+
+  if (!list.length) return <div className="muted">暂无赛段缩短方案。请运营在「天气应急」中录入预警并评估提交。</div>;
+
+  return (
+    <div>
+      <ShorteningBanner raceId={race.id} />
+      {list.map((s) => (
+        <div className="card" key={s.id} style={{ background: s.status === 'CONFIRMED' ? '#fffafa' : '#fffdf5' }}>
+          <h2>
+            {WEATHER_KINDS[s.alert?.kind] || ''}缩短方案 · 新终点「{s.junction?.name}」（{s.junction?.kmMark}km）
+            <Badge color={SHORTENING_STATUS[s.status]?.[1]}>{SHORTENING_STATUS[s.status]?.[0]}</Badge>
+            {s.status === 'PROPOSED' && <button className="btn danger sm" style={{ marginLeft: 'auto' }} onClick={() => confirm(s)}>裁判确认生效</button>}
+          </h2>
+          <p className="small muted">提交：{fmtTime(s.proposedAt)}{s.confirmedAt && <> · 确认：{fmtTime(s.confirmedAt)}</>}</p>
+          <table>
+            <thead><tr><th>组别</th><th>新关门时间</th><th>已过关键路口</th><th>未通过（关门核验）</th></tr></thead>
+            <tbody>
+              {s.cutoffPlan.map((p: any) => (
+                <tr key={p.groupId}>
+                  <td>{p.groupName}</td>
+                  <td><strong style={{ color: '#b00' }}>{p.cutoffTime}</strong></td>
+                  <td>{p.ridersAhead} <span className="small muted">{p.aheadBibs?.join('、')}</span></td>
+                  <td>{p.ridersBehind} <span className="small muted">{p.behindBibs?.join('、')}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="small muted">评估依据：{s.assessmentSummary}</p>
+          {s.status === 'CONFIRMED' && (
+            <>
+              <h3>关门核验（未通过关键路口选手）</h3>
+              {pendingRiders.length === 0 ? <div className="muted small">无待核验选手（均已关门前到达或已判 DNF）</div> : (
+                <table>
+                  <thead><tr><th>号码</th><th>组别</th><th>操作</th></tr></thead>
+                  <tbody>
+                    {pendingRiders.map((r) => (
+                      <tr key={r.id}>
+                        <td>{r.bibNumber}</td><td>{r.groupName}</td>
+                        <td><button className="btn sm primary" onClick={() => markArrival(s, r.registrationId)}>登记此刻通过新终点</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <p style={{ marginTop: 10 }}>
+                <button className="btn sm danger" onClick={() => closeAll(s)}>批量关门：未到者记 DNF</button>
+              </p>
+            </>
+          )}
+        </div>
+      ))}
+      <div className="card">
+        <h2>任务重生成与岗位签收</h2>
+        <ShorteningTaskBoard raceId={race.id} canAck={true} onChange={load} />
+      </div>
+    </div>
+  );
+}
+
 function TimingTab({ race, notify, setError }: any) {
   const [riders, setRiders] = useState<any[]>([]);
   const [regId, setRegId] = useState('');
   const [pointId, setPointId] = useState('');
   const [chips, setChips] = useState<any[]>([]);
-  const points = (race.routes?.[0]?.points || []).filter((p: any) => ['START', 'TIMING', 'FINISH'].includes(p.type));
+  const points = (race.routes?.[0]?.points || []).filter((p: any) => ['START', 'TIMING', 'FINISH', 'SUPPLY', 'MEDICAL', 'TRAFFIC_CONTROL'].includes(p.type) && p.isActive !== false);
 
   useEffect(() => {
     api(`checkins/race/${race.id}`).then((list) => {
