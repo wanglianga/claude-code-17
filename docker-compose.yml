@@ -1,0 +1,67 @@
+# 城市骑行赛事报名分组与赛道补给管理平台
+# 全部服务一键启动：docker compose up -d --build
+# 仅 web（前端）发布到宿主端口 ${CC_PUBLISH_PORT}；api 与 db 仅在内部网络互访。
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-race}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-race123}
+      POSTGRES_DB: ${POSTGRES_DB:-racedb}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks:
+      - internal
+
+  api:
+    build: ./server
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-race}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-race123}
+      DB_NAME: ${POSTGRES_DB:-racedb}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      PORT: "4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    networks:
+      - internal
+
+  web:
+    build: ./web
+    environment:
+      API_INTERNAL_URL: http://api:4000
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${CC_PUBLISH_PORT}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/login"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  pgdata:

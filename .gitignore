@@ -1,0 +1,56 @@
+# dependencies
+node_modules/
+
+# build outputs
+dist/
+build/
+target/
+.next/
+out/
+coverage/
+
+# env, secrets, credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*secret*
+*token*
+*credential*
+
+# logs, caches, temp files
+*.log
+logs/
+cache/
+caches/
+tmp/
+temp/
+.cache/
+.playwright-cli/
+
+# local databases and runtime state
+*.db
+*.sqlite
+*.sqlite3
+pgdata/
+memory/
+memory*/
+
+# local agent and QA artifacts
+.claude/
+claude/
+traces/
+*_traces/
+*_traces_*/
+jsonl/
+*.jsonl
+QA/
+qa/
+qa-*.*
+*QA*
+
+# local skills
+skill/
+skills/
