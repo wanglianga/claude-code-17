@@ -8,6 +8,7 @@ target/
 .next/
 out/
 coverage/
+*.tsbuildinfo
 
 # env, secrets, credentials
 .env

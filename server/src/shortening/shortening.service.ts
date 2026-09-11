@@ -38,6 +38,7 @@ export const RESULT_RULES: Record<string, string> = {
   PASSED_JUNCTION: '已过关键路口·按过点计时',
   BEHIND_CUTOFF: '未过关键路口·关门核验中',
   PASSED_CUTOFF: '关门前到达·关门点成绩',
+  MISSED_CUTOFF: '关门超时·DNF',
 };
 
 const POST_ROLE_BY_TYPE: Record<string, Role | null> = {
@@ -692,8 +693,9 @@ export class ShorteningService {
           );
           continue;
         }
-        // 有过点记录但已超关门时间 → DNF
+        // 有过点记录但已超关门时间 → DNF（关门超时）
         result.status = 'DNF';
+        result.resultRule = 'MISSED_CUTOFF';
         await this.results.save(result);
         missed++;
         await this.timeline.add(
@@ -704,9 +706,10 @@ export class ShorteningService {
         );
         continue;
       }
-      // 显式批量关门：到点仍无过点记录 → DNF
+      // 显式批量关门：到点仍无过点记录 → DNF（关门超时）
       if (opts.markMissed && cutoff != null && !pass) {
         result.status = 'DNF';
+        result.resultRule = 'MISSED_CUTOFF';
         await this.results.save(result);
         missed++;
         await this.timeline.add(

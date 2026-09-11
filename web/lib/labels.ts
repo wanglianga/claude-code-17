@@ -84,6 +84,7 @@ export const RESULT_RULES: Record<string, [string, string]> = {
   PASSED_JUNCTION: ['已过路口·过点计时', 'blue'],
   BEHIND_CUTOFF: ['关门核验中', 'orange'],
   PASSED_CUTOFF: ['关门前到达·关门点成绩', 'blue'],
+  MISSED_CUTOFF: ['关门超时·DNF', 'red'],
 };
 
 export const SHORT_TASK_KINDS: Record<string, [string, string]> = {

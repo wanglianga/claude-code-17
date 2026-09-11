@@ -648,8 +648,8 @@ export class ResultsController {
       if (ci?.status !== 'PASSED') continue;
       const done = await this.results.findOne({ where: { registrationId: reg.id } });
       if (done?.status === 'FINISHED') continue;
-      // 赛段缩短产生的成绩（关门核验中/已过关键路口）不由模拟流程处理
-      if (done && ['PASSED_JUNCTION', 'BEHIND_CUTOFF', 'PASSED_CUTOFF'].includes(done.resultRule)) continue;
+      // 赛段缩短产生的成绩（关门核验中/已过关键路口/关门点成绩/关门超时）不由模拟流程处理
+      if (done && ['PASSED_JUNCTION', 'BEHIND_CUTOFF', 'PASSED_CUTOFF', 'MISSED_CUTOFF'].includes(done.resultRule)) continue;
       const group = await this.groups.findOne({ where: { id: reg.groupId } });
       const startTime = new Date(`${race.raceDate}T${group?.startTime || '08:00'}:00`);
       const jitterSec = Math.floor(Math.random() * 120);
@@ -705,6 +705,7 @@ export class ResultsController {
         .sort((a, b) => a.netSeconds - b.netSeconds)
         .map((r, i) => ({ ...r, rank: i + 1 }));
       const finished = [...junctionFinishers, ...normalFinishers].sort((a, b) => a.rank - b.rank);
+      // 关门核验中 / 关门超时 DNF / 退赛 DNF 等无有效计时成绩
       const others = inGroup.filter((r) => !(r.status === 'FINISHED' && r.netSeconds != null));
       return { group: g, finished, others };
     });
